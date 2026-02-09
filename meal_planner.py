@@ -211,11 +211,14 @@ def create_html_email(meal_plan_text):
 def send_email(subject, body):
     sender_email = os.environ.get("SENDER_EMAIL")
     sender_password = os.environ.get("SENDER_PASSWORD")
-    receiver_email = os.environ.get("RECEIVER_EMAIL")
+    
+    # Get emails - supports comma-separated list
+    receiver_emails_raw = os.environ.get("RECEIVER_EMAIL")
+    receiver_emails = [email.strip() for email in receiver_emails_raw.split(",")]
     
     msg = MIMEMultipart('alternative')
     msg['From'] = sender_email
-    msg['To'] = receiver_email
+    msg['To'] = ", ".join(receiver_emails)
     msg['Subject'] = subject
     
     # Create both plain text and HTML versions
@@ -226,15 +229,36 @@ def send_email(subject, body):
     msg.attach(text_part)
     msg.attach(html_part)
     
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, receiver_email, msg.as_string())
-        server.quit()
-        print("Email sent successfully!")
-    except Exception as e:
-        print(f"Error sending email: {e}")
+    # Try sending with retry logic
+    max_retries = 3
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"Attempting to send email (attempt {attempt + 1}/{max_retries})...")
+            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, receiver_emails, msg.as_string())
+            server.quit()
+            print(f"✅ Email sent successfully to {len(receiver_emails)} recipient(s)!")
+            return  # Success, exit function
+        except smtplib.SMTPException as e:
+            print(f"❌ SMTP error on attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5)  # Wait 5 seconds before retry
+            else:
+                print(f"Failed to send email after {max_retries} attempts")
+                raise
+        except Exception as e:
+            print(f"❌ Unexpected error on attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5)  # Wait 5 seconds before retry
+            else:
+                print(f"Failed to send email after {max_retries} attempts")
+                raise
 
 # Send the meal plan
 send_email(
