@@ -23,6 +23,15 @@ dietary_requirements = """
 - Include fresh salads 5 days a week
 - Quick weekday meals (under 30 minutes)
 - More elaborate weekend meals allowed
+
+EXCLUDED INGREDIENTS (DO NOT USE):
+- Turkey
+- Blue cheese
+- Cob
+- Breadcrumbs
+- Water chestnuts
+- Caesar dressing
+- Ranch dressing
 """
 
 # Create the prompt for Claude with recipe instructions
