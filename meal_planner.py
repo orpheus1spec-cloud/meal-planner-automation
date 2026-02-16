@@ -209,6 +209,8 @@ def create_html_email(meal_plan_text):
 
 # Send email with both plain text and HTML versions
 def send_email(subject, body):
+    import socket
+    
     sender_email = os.environ.get("SENDER_EMAIL")
     sender_password = os.environ.get("SENDER_PASSWORD")
     
@@ -225,40 +227,54 @@ def send_email(subject, body):
     text_part = MIMEText(body, 'plain')
     html_part = MIMEText(create_html_email(body), 'html')
     
-    # Attach both versions (email clients will show HTML if supported, plain text otherwise)
     msg.attach(text_part)
     msg.attach(html_part)
     
-    # Try sending with retry logic
-    max_retries = 3
+    # Try multiple SMTP configurations
+    smtp_configs = [
+        {'host': 'smtp.gmail.com', 'port': 587, 'use_tls': True},
+        {'host': 'smtp.gmail.com', 'port': 465, 'use_tls': False},  # SSL
+    ]
+    
+    import ssl
     import time
     
-    for attempt in range(max_retries):
-        try:
-            print(f"Attempting to send email (attempt {attempt + 1}/{max_retries})...")
-            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, receiver_emails, msg.as_string())
-            server.quit()
-            print(f"✅ Email sent successfully to {len(receiver_emails)} recipient(s)!")
-            return  # Success, exit function
-        except smtplib.SMTPException as e:
-            print(f"❌ SMTP error on attempt {attempt + 1}: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(5)  # Wait 5 seconds before retry
-            else:
-                print(f"Failed to send email after {max_retries} attempts")
-                raise
-        except Exception as e:
-            print(f"❌ Unexpected error on attempt {attempt + 1}: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(5)  # Wait 5 seconds before retry
-            else:
-                print(f"Failed to send email after {max_retries} attempts")
-                raise
+    for config in smtp_configs:
+        for attempt in range(3):  # 3 attempts per configuration
+            try:
+                print(f"Trying {config['host']}:{config['port']} (attempt {attempt + 1}/3)...")
+                
+                if config['use_tls']:
+                    # TLS method (port 587)
+                    server = smtplib.SMTP(config['host'], config['port'], timeout=30)
+                    server.set_debuglevel(0)
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                else:
+                    # SSL method (port 465)
+                    context = ssl.create_default_context()
+                    server = smtplib.SMTP_SSL(config['host'], config['port'], timeout=30, context=context)
+                    server.ehlo()
+                
+                print("Logging in...")
+                server.login(sender_email, sender_password)
+                
+                print("Sending email...")
+                server.sendmail(sender_email, receiver_emails, msg.as_string())
+                server.quit()
+                
+                print(f"✅ Email sent successfully to {len(receiver_emails)} recipient(s)!")
+                return True
+                
+            except Exception as e:
+                print(f"❌ Attempt {attempt + 1} failed with {config['host']}:{config['port']} - {str(e)}")
+                if attempt < 2:  # Don't sleep on last attempt
+                    time.sleep(5)
+                continue
+    
+    # If all methods failed
+    raise Exception("Failed to send email with all SMTP configurations after all retries")
 
 # Send the meal plan
 send_email(
