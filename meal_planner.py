@@ -209,72 +209,59 @@ def create_html_email(meal_plan_text):
 
 # Send email with both plain text and HTML versions
 def send_email(subject, body):
-    import socket
+    """Send email using Resend API (free & reliable)"""
+    import requests
     
-    sender_email = os.environ.get("SENDER_EMAIL")
-    sender_password = os.environ.get("SENDER_PASSWORD")
+    resend_api_key = os.environ.get("RESEND_API_KEY")
     
-    # Get emails - supports comma-separated list
+    # Use Resend's verified sender for now
+    # You can change this to your own email after verifying it in Resend
+    sender_email = "onboarding@resend.dev"
+    
+    # Get receiver emails - supports comma-separated list
     receiver_emails_raw = os.environ.get("RECEIVER_EMAIL")
     receiver_emails = [email.strip() for email in receiver_emails_raw.split(",")]
     
-    msg = MIMEMultipart('alternative')
-    msg['From'] = sender_email
-    msg['To'] = ", ".join(receiver_emails)
-    msg['Subject'] = subject
+    # Create HTML email
+    html_content = create_html_email(body)
     
-    # Create both plain text and HTML versions
-    text_part = MIMEText(body, 'plain')
-    html_part = MIMEText(create_html_email(body), 'html')
+    url = "https://api.resend.com/emails"
+    headers = {
+        "Authorization": f"Bearer {resend_api_key}",
+        "Content-Type": "application/json"
+    }
     
-    msg.attach(text_part)
-    msg.attach(html_part)
+    data = {
+        "from": f"Meal Planner <{sender_email}>",
+        "to": receiver_emails,
+        "subject": subject,
+        "html": html_content,
+        "text": body
+    }
     
-    # Try multiple SMTP configurations
-    smtp_configs = [
-        {'host': 'smtp.gmail.com', 'port': 587, 'use_tls': True},
-        {'host': 'smtp.gmail.com', 'port': 465, 'use_tls': False},  # SSL
-    ]
-    
-    import ssl
-    import time
-    
-    for config in smtp_configs:
-        for attempt in range(3):  # 3 attempts per configuration
-            try:
-                print(f"Trying {config['host']}:{config['port']} (attempt {attempt + 1}/3)...")
-                
-                if config['use_tls']:
-                    # TLS method (port 587)
-                    server = smtplib.SMTP(config['host'], config['port'], timeout=30)
-                    server.set_debuglevel(0)
-                    server.ehlo()
-                    server.starttls()
-                    server.ehlo()
-                else:
-                    # SSL method (port 465)
-                    context = ssl.create_default_context()
-                    server = smtplib.SMTP_SSL(config['host'], config['port'], timeout=30, context=context)
-                    server.ehlo()
-                
-                print("Logging in...")
-                server.login(sender_email, sender_password)
-                
-                print("Sending email...")
-                server.sendmail(sender_email, receiver_emails, msg.as_string())
-                server.quit()
-                
-                print(f"✅ Email sent successfully to {len(receiver_emails)} recipient(s)!")
-                return True
-                
-            except Exception as e:
-                print(f"❌ Attempt {attempt + 1} failed with {config['host']}:{config['port']} - {str(e)}")
-                if attempt < 2:  # Don't sleep on last attempt
-                    time.sleep(5)
-                continue
-    
-    # If all methods failed
-    raise Exception("Failed to send email with all SMTP configurations after all retries")
+    try:
+        print("Sending email via Resend...")
+        print(f"From: {sender_email}")
+        print(f"To: {', '.join(receiver_emails)}")
+        
+        response = requests.post(url, headers=headers, json=data)
+        response_data = response.json()
+        
+        if response.status_code == 200:
+            print(f"✅ Email sent successfully!")
+            print(f"Email ID: {response_data.get('id', 'N/A')}")
+            return True
+        else:
+            print(f"❌ Resend error: {response.status_code}")
+            print(f"Response: {response.text}")
+            raise Exception(f"Resend API error: {response.status_code} - {response.text}")
+            
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error: {e}")
+        raise
+    except Exception as e:
+        print(f"❌ Error sending email: {e}")
+        raise
 
 # Send the meal plan
 send_email(
