@@ -214,8 +214,7 @@ def send_email(subject, body):
     
     resend_api_key = os.environ.get("RESEND_API_KEY")
     
-    # Use Resend's verified sender for now
-    # You can change this to your own email after verifying it in Resend
+    # Use Resend's verified test sender
     sender_email = "onboarding@resend.dev"
     
     # Get receiver emails - supports comma-separated list
@@ -231,29 +230,39 @@ def send_email(subject, body):
         "Content-Type": "application/json"
     }
     
+    # Send to each recipient individually (Resend free tier requirement)
     data = {
-        "from": f"Meal Planner <{sender_email}>",
+        "from": "Meal Planner <onboarding@resend.dev>",
         "to": receiver_emails,
         "subject": subject,
-        "html": html_content,
-        "text": body
+        "html": html_content
     }
     
     try:
         print("Sending email via Resend...")
-        print(f"From: {sender_email}")
+        print(f"From: onboarding@resend.dev")
         print(f"To: {', '.join(receiver_emails)}")
+        print(f"API Key (first 10 chars): {resend_api_key[:10]}...")
         
         response = requests.post(url, headers=headers, json=data)
-        response_data = response.json()
+        
+        print(f"Response status: {response.status_code}")
+        print(f"Response body: {response.text}")
         
         if response.status_code == 200:
+            response_data = response.json()
             print(f"✅ Email sent successfully!")
             print(f"Email ID: {response_data.get('id', 'N/A')}")
             return True
         else:
             print(f"❌ Resend error: {response.status_code}")
             print(f"Response: {response.text}")
+            
+            # Check if it's a validation error for domain
+            if "domain" in response.text.lower():
+                print("\n⚠️  Domain validation issue detected.")
+                print("You may need to verify your recipient email addresses.")
+            
             raise Exception(f"Resend API error: {response.status_code} - {response.text}")
             
     except requests.exceptions.RequestException as e:
